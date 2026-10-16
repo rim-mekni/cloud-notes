@@ -1,0 +1,7 @@
+# Copier ce fichier en "terraform.tfvars" et remplir l'ID de souscription.
+# terraform.tfvars est ignoré par Git.
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
+# Optionnel : changer si la région ou la taille n'est pas disponible
+# location = "swedencentral"
+# vm_size  = "Standard_B1s"

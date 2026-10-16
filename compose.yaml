@@ -1,0 +1,39 @@
+# Docker Compose : 2 services (web + base de données) sur la même machine.
+# Utilisé en local ET sur la VM Azure.
+name: cloudnotes
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: notes
+      POSTGRES_USER: notes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+    volumes:
+      # Volume persistant : les données survivent aux redémarrages / redéploiements
+      - pgdata:/var/lib/postgresql/data
+    # Pas de "ports:" => la base n'est PAS accessible depuis Internet,
+    # seulement depuis le réseau Docker interne (donc par le service web).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes -d notes"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    # En CI/CD, WEB_IMAGE = image construite et poussée sur GHCR.
+    # En local, l'image est construite depuis ./app
+    image: ${WEB_IMAGE:-cloudnotes-web:local}
+    build: ./app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://notes:${POSTGRES_PASSWORD}@db:5432/notes
+    ports:
+      - "80:8000"   # port 80 de la machine -> port 8000 du conteneur
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

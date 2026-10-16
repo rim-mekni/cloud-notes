@@ -1,0 +1,16 @@
+# Secrets locaux
+.env
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/terraform.tfvars
+infra/tfplan
+infra/.terraform.lock.hcl.bak
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

@@ -1,0 +1,19 @@
+#cloud-config
+# Exécuté automatiquement au PREMIER démarrage de la VM.
+package_update: true
+
+write_files:
+  # Mot de passe de la base, généré par Terraform. Lisible uniquement par root.
+  - path: /opt/cloudnotes/.env
+    permissions: "0600"
+    owner: root:root
+    content: |
+      POSTGRES_PASSWORD=${db_password}
+
+runcmd:
+  # Installer Docker Engine + le plugin Docker Compose (script officiel Docker)
+  - curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+  - sh /tmp/get-docker.sh
+  - systemctl enable --now docker
+  - usermod -aG docker azureuser
+  - touch /opt/cloudnotes/.bootstrap-done

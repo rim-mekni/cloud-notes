@@ -1,0 +1,134 @@
+# Pipeline CI/CD : Push sur main -> Build -> Check -> Deploy -> Verify
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # permet aussi de le lancer à la main depuis l'onglet Actions
+
+permissions:
+  contents: read
+  packages: write # pour pousser l'image sur GitHub Container Registry (GHCR)
+
+env:
+  RESOURCE_GROUP: rg-cloudnotes # doit correspondre à infra/variables.tf
+  VM_NAME: vm-cloudnotes
+
+jobs:
+  # ---------------------------------------------------------------
+  build-and-test:
+    name: Build & Check
+    runs-on: ubuntu-latest
+
+    # Une vraie base PostgreSQL temporaire pour les tests
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: notes
+          POSTGRES_USER: notes
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notes -d notes"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    outputs:
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances
+        run: pip install -r app/requirements.txt pytest
+
+      - name: Lancer les tests automatiques
+        working-directory: app
+        env:
+          DATABASE_URL: postgresql://notes:test@localhost:5432/notes
+        run: python -m pytest -v tests
+
+      - name: Calculer le nom de l'image
+        id: meta
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"   # GHCR exige des minuscules
+          echo "image=ghcr.io/${OWNER}/cloudnotes-web" >> "$GITHUB_OUTPUT"
+          echo "image_ref=ghcr.io/${OWNER}/cloudnotes-web:${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Se connecter à GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire et pousser l'image Docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image_ref }}
+            ${{ steps.meta.outputs.image }}:latest
+
+  # ---------------------------------------------------------------
+  deploy:
+    name: Deploy & Verify
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    concurrency: production # jamais deux déploiements en même temps
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Se connecter à Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Déployer sur la VM (az vm run-command, sans SSH)
+        env:
+          IMAGE_REF: ${{ needs.build-and-test.outputs.image_ref }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COMPOSE_B64=$(base64 -w0 compose.yaml)
+          {
+            echo "IMAGE_REF='${IMAGE_REF}'"
+            echo "COMPOSE_B64='${COMPOSE_B64}'"
+            echo "GH_USER='${{ github.actor }}'"
+            echo "GH_TOKEN='${GH_TOKEN}'"
+            cat scripts/deploy-on-vm.sh
+          } > /tmp/deploy.sh
+
+          OUTPUT=$(az vm run-command invoke \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --command-id RunShellScript \
+            --scripts @/tmp/deploy.sh \
+            --query "value[0].message" -o tsv)
+          rm -f /tmp/deploy.sh
+
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "DEPLOY_OK" || { echo "::error::Le déploiement a échoué"; exit 1; }
+
+      - name: Vérifier depuis Internet (health check + page)
+        run: |
+          IP=$(az vm show -d -g "$RESOURCE_GROUP" -n "$VM_NAME" --query publicIps -o tsv)
+          echo "Application : http://$IP"
+          for i in $(seq 1 20); do
+            curl -fs "http://$IP/health" && break
+            sleep 5
+          done
+          curl -fsS "http://$IP/health"
+          curl -fsS "http://$IP/" | grep -o "<h1>.*</h1>"
+          echo "### Déployé : http://$IP" >> "$GITHUB_STEP_SUMMARY"

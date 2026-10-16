@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notes</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; background: #f6f7f9; color: #1f2933; }
+    h1 { margin-bottom: 4px; }
+    .sub { color: #6b7785; margin-top: 0; }
+    form.add { display: flex; gap: 8px; margin: 24px 0; }
+    form.add input { flex: 1; padding: 10px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 16px; }
+    button { padding: 10px 16px; border: 0; border-radius: 6px; background: #2563eb; color: white; font-size: 15px; cursor: pointer; }
+    ul { list-style: none; padding: 0; }
+    li { background: white; border: 1px solid #e4e7eb; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .date { color: #9aa5b1; font-size: 13px; }
+    form.del button { background: #e4e7eb; color: #3e4c59; padding: 6px 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>My Notes</h1>
+  <p class="sub">Notes stored in PostgreSQL</p>
+
+  <form class="add" method="post" action="/notes">
+    <input name="content" placeholder="Write a note..." required maxlength="500">
+    <button type="submit">Add</button>
+  </form>
+
+  <ul>
+    {% for note in notes %}
+    <li>
+      <div>
+        <div>{{ note[1] }}</div>
+        <div class="date">{{ note[2].strftime('%Y-%m-%d %H:%M') }}</div>
+      </div>
+      <form class="del" method="post" action="/notes/{{ note[0] }}/delete">
+        <button type="submit">Delete</button>
+      </form>
+    </li>
+    {% else %}
+    <li>No notes yet.</li>
+    {% endfor %}
+  </ul>
+</body>
+</html>
