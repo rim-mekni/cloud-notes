@@ -2,7 +2,7 @@
 # Script exécuté SUR LA VM par "az vm run-command" depuis GitHub Actions.
 # Les variables IMAGE_REF, COMPOSE_B64, GH_USER et GH_TOKEN sont ajoutées
 # en tête de ce script par le workflow avant l'envoi.
-set -euo pipefail
+set -eu
 
 APP_DIR=/opt/cloudnotes
 cd "$APP_DIR"
