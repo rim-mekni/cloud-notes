@@ -6,7 +6,7 @@ variable "subscription_id" {
 variable "location" {
   description = "Région Azure"
   type        = string
-  default     = "swedencentral"
+  default     = "polandcentral"
 }
 
 variable "resource_group_name" {
@@ -24,5 +24,5 @@ variable "vm_name" {
 variable "vm_size" {
   description = "Taille de la VM (petite = pas chère)"
   type        = string
-  default     = "Standard_B1s"
+  default     = "Standard_B2ats_v2"
 }
